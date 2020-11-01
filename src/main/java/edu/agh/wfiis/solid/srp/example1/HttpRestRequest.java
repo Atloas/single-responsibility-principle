@@ -7,7 +7,9 @@ import edu.agh.wfiis.solid.srp.example1.model.MuleMessage;
 
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class HttpRestRequest {
     protected MuleMessage muleMessage;
@@ -20,13 +22,15 @@ public class HttpRestRequest {
     public MuleMessage validate(Constraints validationConstraints) throws InvalidHeaderException {
         this.validationConstraints = validationConstraints;
 
-        List<HeaderValidationError> headerValidationErrors = validateHeaders(validationConstraints.getHeaderConstraints());
+        List<HeaderValidationError> headerValidationErrors = validateHeaders(
+                muleMessage.getHeaders(),
+                validationConstraints.getHeaderConstraints());
 
         if(!headerValidationErrors.isEmpty()) {
             throw new InvalidHeaderException(headerValidationErrors.get(0).getError());
         }
 
-        setMissingHeadersDefaultValues();
+        setMissingMessageHeadersDefaultValues(validationConstraints.getHeaderConstraints());
         return muleMessage;
     }
 
@@ -35,7 +39,7 @@ public class HttpRestRequest {
 
         for (Constraint constraint : headerConstraints) {
             String headerName = constraint.getHeaderName();
-            String headerValue = muleMessage.getHeader(headerName);
+            String headerValue = headerValuesByNames.get(headerName);
 
             if (headerValue == null && constraint.isHeaderRequired()) {
                 errorMessages.add(new MissingHeaderValidationError(headerName));
@@ -51,13 +55,13 @@ public class HttpRestRequest {
         return errorMessages;
     }
 
-    private void setMissingHeadersDefaultValuesInMessage( ){
-        for (Constraint constraint : validationConstraints.getHeaderConstraints()) {
-            tryToSetDefaultHeaderValue(constraint,muleMessage);
+    private void setMissingMessageHeadersDefaultValues(List<Constraint> headerConstraints) {
+        for (Constraint constraint : headerConstraints) {
+            tryToSetDefaultHeaderValue(constraint);
         }
     }
 
-    private boolean tryToSetDefaultHeaderValue(Constraint constraint, MuleMessage muleMessage){
+    private boolean tryToSetDefaultHeaderValue(Constraint constraint) {
         if (muleMessage.getHeader(constraint.getHeaderName()) == null && constraint.getDefaultValue() != null) {
             setDefaultHeaderValue(constraint, muleMessage);
             return true;
@@ -74,24 +78,24 @@ interface HeaderValidationError {
     String getError();
 }
 
-class MissingHeaderValidationError  implements HeaderValidationError {
+class MissingHeaderValidationError implements HeaderValidationError {
     private final String headerName;
 
-    public MissingHeaderValidationError(String headerName) {
+    MissingHeaderValidationError(String headerName) {
         this.headerName = headerName;
     }
 
     @Override
     public String getError() {
-        return "Required header " + headerName + " not specified";
+        return MessageFormat.format("Required header {0} not specified", headerName);
     }
 }
 
-class InvalidHeaderValueValidationError  implements HeaderValidationError {
+class InvalidHeaderValueValidationError implements HeaderValidationError {
     private final String headerName;
     private final String headerValue;
 
-    public InvalidHeaderValueValidationError(String headerName, String headerValue) {
+    InvalidHeaderValueValidationError(String headerName, String headerValue) {
         this.headerName = headerName;
         this.headerValue = headerValue;
     }
